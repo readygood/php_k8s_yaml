@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: php-payweb-nginx
+  namespace: php-prod
+data:
+    default.conf: |
+      server {
+        listen 80;
+        server_name payweb.xubei.com ;
+        access_log /data/wwwlogs/nginx_payweb_access.log proxy;
+        error_log /data/wwwlogs/nginx_payweb_error.log;
+        index index.html index.htm index.php;
+        root /data/wwwroot/default/www/public/;
+
+        location / {
+          try_files $uri $uri/ /index.php?$query_string;
+        }
+
+        #error_page 404 /404.html;
+        #error_page 502 /502.html;
+
+        location ~ [^/]\.php(/|$) {
+          #fastcgi_pass remote_php_ip:9000;
+          if ($request_uri ~ "/api/title") {
+            access_log off;
+          }
+          fastcgi_pass 127.0.0.1:9000;
+          fastcgi_index index.php;
+          include fastcgi.conf;
+        }
+
+        location ~ .*\.(gif|jpg|jpeg|png|bmp|swf|flv|mp4|ico)$ {
+          expires 30d;
+          access_log off;
+        }
+        location ~ .*\.(js|css)?$ {
+          expires 7d;
+          access_log off;
+        }
+        location ~ /\.ht {
+          deny all;
+        }
+      }
