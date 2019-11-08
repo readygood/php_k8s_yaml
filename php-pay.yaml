@@ -1,0 +1,138 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: php-pay
+  namespace: php-prod
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: php-pay
+  template:
+    metadata:
+      name: php-pay
+      namespace: php-prod
+      labels:
+        app: php-pay
+    spec:
+      containers:
+      - name: php-pay-nginx
+        image: registry-vpc.cn-shenzhen.aliyuncs.com/xubei-php/php-pay:${DOCKER_TAG}
+        imagePullPolicy: Always
+        env:
+        - name: aliyun_logs_php_nginxlog
+          value: nginxlog
+        ports:
+        - name: nginx80
+          containerPort: 80
+        lifecycle:
+          postStart:
+            exec:
+              command: ["/bin/sh","-c","mv /default /data/wwwroot  &&  chown -R www.www /data/wwwroot/"]
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "/usr/bin/nc -zv 127.0.0.1 80"
+          initialDelaySeconds: 1
+          failureThreshold: 3
+          periodSeconds: 3
+          successThreshold: 1
+          timeoutSeconds: 3
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "/usr/bin/nc -zv 127.0.0.1 80"
+          initialDelaySeconds: 1
+          failureThreshold: 3
+          periodSeconds: 3
+          successThreshold: 1
+          timeoutSeconds: 3
+        volumeMounts:
+        - name: nginx-php-rootdir
+          mountPath: /data/wwwroot
+        - name: nginx-php-logs
+          mountPath: /data/wwwlogs
+        - name: php-pay-nginx-conf
+          readOnly: true
+          mountPath: /usr/local/openresty/nginx/conf/vhost
+      - name: php-pay-php-fpm
+        image: registry-vpc.cn-shenzhen.aliyuncs.com/xubei-php/php-fpm-new:7.1.23.3-ext
+        imagePullPolicy: Always
+        ports:
+        - name: fastcgi9000
+          containerPort: 9000
+        env:
+        - name: aliyun_logs_php_applog
+          value: applog
+        - name: PHP_EXTRA_CONFIGURE_ARGS
+          value: "--enable-fpm --with-fpm-user=www --with-fpm-group=www --disable-cgi"
+        lifecycle:
+          postStart:
+            exec:
+              command: ["/bin/sh","-c","chown -R www.www /data/wwwroot/"]
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "/bin/nc -zv 127.0.0.1 9000"
+          initialDelaySeconds: 1
+          failureThreshold: 3
+          periodSeconds: 3
+          successThreshold: 1
+          timeoutSeconds: 3
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "/bin/nc -zv 127.0.0.1 9000"
+          initialDelaySeconds: 3
+          failureThreshold: 3
+          periodSeconds: 3
+          successThreshold: 1
+          timeoutSeconds: 3
+        volumeMounts:
+        - name: nginx-php-rootdir
+          mountPath: /data/wwwroot
+        - name: nginx-php-logs
+          mountPath: /data/wwwlogs
+        - name: php-pay-ini-conf
+          mountPath: /usr/local/etc/php/php.ini
+          readOnly: true
+          subPath: php.ini
+      restartPolicy: Always
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - php-pay
+      nodeSelector:
+        app: php
+      imagePullSecrets:
+      - name: wuhanzhuxiang
+      volumes:
+      - name: php-pay-nginx-conf
+        configMap:
+          name: php-pay-nginx
+      - name: php-pay-ini-conf
+        configMap:
+          name: php-pay-ini
+          items:
+          - key: php.ini
+            path: php.ini
+      - name: nginx-php-rootdir
+        emptyDir: {}
+      - name: nginx-php-logs
+        emptyDir: {}

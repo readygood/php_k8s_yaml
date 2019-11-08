@@ -1,0 +1,124 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: php-payweb
+  namespace: php-prod
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: php-payweb
+  template:
+    metadata:
+      name: php-payweb
+      namespace: php-prod
+      labels:
+        app: php-payweb
+    spec:
+      containers:
+      - name: php-payweb-nginx
+        image: registry-vpc.cn-shenzhen.aliyuncs.com/xubei-php/php-payweb:${DOCKER_TAG}
+        imagePullPolicy: Always
+        env:
+        - name: aliyun_logs_php_nginxlog
+          value: nginxlog
+        ports:
+        - name: nginx80
+          containerPort: 80
+        lifecycle:
+          postStart:
+            exec:
+              command: ["/bin/sh","-c","mv /default /data/wwwroot  &&  chown -R www.www /data/wwwroot/"]
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "/usr/bin/nc -zv 127.0.0.1 80"
+          initialDelaySeconds: 1
+          failureThreshold: 3
+          periodSeconds: 3
+          successThreshold: 1
+          timeoutSeconds: 3
+        readinessProbe:
+          httpGet:
+            port: nginx80
+            path: /api/title
+            scheme: HTTP
+          initialDelaySeconds: 1
+          failureThreshold: 3
+          periodSeconds: 3
+          successThreshold: 1
+          timeoutSeconds: 3
+        volumeMounts:
+        - name: nginx-php-rootdir
+          mountPath: /data/wwwroot
+        - name: nginx-php-logs
+          mountPath: /data/wwwlogs
+        - name: php-payweb-nginx-conf
+          readOnly: true
+          mountPath: /usr/local/openresty/nginx/conf/vhost
+      - name: php-payweb-php-fpm
+        image: registry-vpc.cn-shenzhen.aliyuncs.com/xubei-php/php-fpm-new:7.1.23.3-ext
+        imagePullPolicy: Always
+        ports:
+        - name: fastcgi9000
+          containerPort: 9000
+        env:
+        - name: aliyun_logs_php_applog
+          value: applog
+        - name: PHP_EXTRA_CONFIGURE_ARGS
+          value: "--enable-fpm --with-fpm-user=www --with-fpm-group=www --disable-cgi"
+        lifecycle:
+          postStart:
+            exec:
+              command: ["/bin/sh","-c","chown -R www.www /data/wwwroot/"]
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "/usr/bin/nc -zv 127.0.0.1 9000"
+          initialDelaySeconds: 1
+          failureThreshold: 3
+          periodSeconds: 3
+          successThreshold: 1
+          timeoutSeconds: 3
+        readinessProbe:
+          httpGet:
+            port: nginx80
+            path: /api/title
+            scheme: HTTP
+          initialDelaySeconds: 3
+          failureThreshold: 3
+          periodSeconds: 3
+          successThreshold: 1
+          timeoutSeconds: 3
+        volumeMounts:
+        - name: nginx-php-rootdir
+          mountPath: /data/wwwroot
+        - name: nginx-php-logs
+          mountPath: /data/wwwlogs
+        - name: php-payweb-ini-conf
+          mountPath: /usr/local/etc/php/php.ini
+          readOnly: true
+          subPath: php.ini
+      restartPolicy: Always
+      nodeSelector:
+        app: php
+      imagePullSecrets:
+      - name: wuhanzhuxiang
+      volumes:
+      - name: php-payweb-nginx-conf
+        configMap:
+          name: php-payweb-nginx
+      - name: php-payweb-ini-conf
+        configMap:
+          name: php-payweb-ini
+          items:
+          - key: php.ini
+            path: php.ini
+      - name: nginx-php-rootdir
+        emptyDir: {}
+      - name: nginx-php-logs
+        emptyDir: {}
