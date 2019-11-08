@@ -1,0 +1,17 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: php-pay
+  namespace: php-prod
+  annotations:
+    nginx.ingress.kubernetes.io/configuration-snippet:  |
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+spec:
+  rules:
+  - host: pay.xubei.com
+    http:
+      paths:
+      - backend:
+          serviceName: php-pay
+          servicePort: 80
+        path: /
